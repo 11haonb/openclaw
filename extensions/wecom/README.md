@@ -1,72 +1,285 @@
-# OpenClaw WeCom Plugin / 企业微信插件
+<p align="center">
+  <img src="https://api.iconify.design/tdesign/logo-wecom.svg?color=%2307C160" alt="WeCom Logo" width="80" height="80">
+  &nbsp;&nbsp;
+  <img src="https://api.iconify.design/simple-icons/wechat.svg?color=%2307C160" alt="WeChat Logo" width="80" height="80">
+</p>
 
-[English](#english) | [中文](#中文)
+<h1 align="center">WeCom OpenClaw Integration</h1>
+
+<p align="center">
+  <strong>🤖 Connect your AI agent to WeCom (企业微信)</strong>
+  <br>
+  <sub>Send messages via WeCom → AI processes → Control your computer remotely</sub>
+</p>
+
+<p align="center">
+  <em>For <a href="https://github.com/openclaw/openclaw">OpenClaw</a> (formerly known as Moltbot, originally Clawdbot)</em>
+</p>
+
+<p align="center">
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
+  </a>
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D18-339933?logo=node.js&logoColor=white" alt="Node Version">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/WeCom-企业微信-07C160?logo=wechat&logoColor=white" alt="WeCom">
+</p>
+
+<p align="center">
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-features">Features</a> •
+  <a href="#%EF%B8%8F-remote-browser-control">Browser Control</a> •
+  <a href="#-documentation">Docs</a> •
+  <a href="./docs/QUICKSTART_CN.md">中文文档</a>
+</p>
 
 ---
 
-## English
+## 📖 What is this?
 
-### Overview
+This plugin connects [OpenClaw](https://github.com/openclaw/openclaw) AI agent to **WeCom (企业微信/WeChat Work)**.
 
-OpenClaw WeCom plugin enables AI agent integration with WeCom (企业微信/WeChat Work). Send messages to your WeCom app and get AI-powered responses with tool capabilities.
+<table>
+  <tr>
+    <td align="center">💬</td>
+    <td><strong>Chat with AI</strong><br/>Send messages via WeCom, get AI-powered responses</td>
+  </tr>
+  <tr>
+    <td align="center">🖥️</td>
+    <td><strong>Remote Browser Control</strong><br/>Control your PC's browser from your phone</td>
+  </tr>
+  <tr>
+    <td align="center">📁</td>
+    <td><strong>Rich Media</strong><br/>Send/receive images, voice, video, files</td>
+  </tr>
+  <tr>
+    <td align="center">🔧</td>
+    <td><strong>Tool Calling</strong><br/>AI can execute tasks with 100+ built-in tools</td>
+  </tr>
+</table>
 
-### Features
+---
 
-- **Message Reception**: Receive text messages from WeCom users
-- **Message Encryption**: AES-256-CBC encryption/decryption with signature verification
-- **AI Agent Integration**: Full OpenClaw agent system with tool calling support
-- **Text Replies**: Send text and markdown messages
-- **Image Replies**: Send images from local files or URLs
-- **Multi-model Support**: Works with Qwen, Claude, GPT, and other models via OpenRouter
+## ⚡ Quick Start
 
-### Installation
+### 1️⃣ Get WeCom Credentials
 
-1. **Enable the plugin** in your OpenClaw config (`~/.openclaw/openclaw.json`):
+| Field | Where to Find |
+|:------|:--------------|
+| **Corp ID** | WeCom Admin → My Enterprise → Enterprise ID |
+| **Agent ID** | App Management → Your App → Agent ID |
+| **Secret** | App Management → Your App → Secret |
+| **Token** | Your App → Receive Messages → Generate |
+| **AES Key** | Your App → Receive Messages → Generate |
+
+### 2️⃣ Configure OpenClaw
+
+Create `~/.openclaw/openclaw.json`:
 
 ```json
 {
+  "env": {
+    "WECOM_CORP_ID": "ww1234567890abcdef",
+    "WECOM_CORP_SECRET": "your-app-secret",
+    "WECOM_AGENT_ID": "1000001",
+    "WECOM_CALLBACK_TOKEN": "your-token",
+    "WECOM_CALLBACK_AES_KEY": "your-43-character-aes-key"
+  },
   "plugins": {
     "entries": {
-      "wecom": {
-        "enabled": true
-      }
+      "wecom": { "enabled": true }
     }
   }
 }
 ```
 
-2. **Set environment variables**:
+### 3️⃣ Start Gateway
+
+```bash
+cd /path/to/openclaw
+pnpm build && node dist/entry.js gateway
+```
+
+### 4️⃣ Set Callback URL
+
+In WeCom Admin → Your App → Receive Messages:
+
+```
+URL: http://YOUR_SERVER:18789/wecom/callback
+```
+
+### 5️⃣ Test It! 🎉
+
+Open WeCom app → Find your app → Send "Hello"!
+
+---
+
+## ✨ Features
+
+<table>
+  <thead>
+    <tr>
+      <th>Category</th>
+      <th>Feature</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td rowspan="6"><strong>📨 Messaging</strong></td>
+      <td>Text messages</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Image messages</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Voice messages</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Video messages</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>File messages</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Message cards</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td rowspan="3"><strong>👥 Group Chat</strong></td>
+      <td>Group messages</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>@mention detection</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Access control</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td rowspan="2"><strong>🖥️ Browser</strong></td>
+      <td>Remote control</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Screenshot capture</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td rowspan="3"><strong>⚙️ Advanced</strong></td>
+      <td>Multi-account</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Event handling</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Mini programs</td>
+      <td>✅</td>
+    </tr>
+  </tbody>
+</table>
+
+---
+
+## 🖥️ Remote Browser Control
+
+**Control your computer's browser from your phone!**
+
+```
+┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+│  📱 Phone    │      │  🖥️ Server   │      │  💻 Your PC  │
+│    WeCom     │ ───▶ │   OpenClaw   │ ───▶ │   Browser    │
+└──────────────┘      └──────────────┘      └──────────────┘
+```
+
+### Setup
+
+<details>
+<summary><strong>1. Configure Server</strong></summary>
+
+Add to `~/.openclaw/openclaw.json`:
 
 ```json
 {
-  "env": {
-    "WECOM_CORP_ID": "your-corp-id",
-    "WECOM_CORP_SECRET": "your-corp-secret",
-    "WECOM_AGENT_ID": "your-agent-id",
-    "WECOM_CALLBACK_TOKEN": "your-callback-token",
-    "WECOM_CALLBACK_AES_KEY": "your-aes-key"
+  "browser": { "enabled": true },
+  "gateway": {
+    "nodes": {
+      "browser": { "mode": "auto" }
+    }
   }
 }
 ```
 
-3. **Configure WeCom Admin Console**:
-   - Go to: WeCom Admin Console → App Management → Your App → Receive Messages
-   - Set callback URL: `http://YOUR_SERVER_IP:18789/wecom/callback`
-   - Set Token and EncodingAESKey (same as your config)
+</details>
 
-### Configuration
+<details>
+<summary><strong>2. Install and Run Node Host on Your PC</strong></summary>
 
-Full example config (`~/.openclaw/openclaw.json`):
+```bash
+# Install OpenClaw
+npm install -g openclaw
+
+# Connect to your server
+openclaw node run --host YOUR_SERVER_IP --port 18789
+```
+
+</details>
+
+<details>
+<summary><strong>3. Send Commands via WeCom</strong></summary>
+
+| Command | Action |
+|:--------|:-------|
+| `打开浏览器访问淘宝` | Open browser, go to taobao.com |
+| `搜索 iPhone 16` | Search on current page |
+| `截图` | Take screenshot |
+| `点击第一个商品` | Click first product |
+
+</details>
+
+📖 **[Full Browser Control Guide →](./docs/BROWSER_CONTROL.md)**
+
+---
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+| Variable | Required | Description |
+|:---------|:--------:|:------------|
+| `WECOM_CORP_ID` | ✅ | Enterprise ID |
+| `WECOM_CORP_SECRET` | ✅ | App secret |
+| `WECOM_AGENT_ID` | ✅ | App agent ID |
+| `WECOM_CALLBACK_TOKEN` | ✅ | Callback token |
+| `WECOM_CALLBACK_AES_KEY` | ✅ | 43-char AES key |
+| `WECOM_BOT_NAME` | | Bot name for @mention |
+| `WECOM_WELCOME_MESSAGE` | | Auto-reply for new users |
+
+### Full Example
+
+<details>
+<summary><strong>Click to expand</strong></summary>
 
 ```json
 {
   "env": {
-    "OPENROUTER_API_KEY": "your-openrouter-key",
-    "WECOM_CORP_ID": "your-corp-id",
-    "WECOM_CORP_SECRET": "your-corp-secret",
-    "WECOM_AGENT_ID": "your-agent-id",
-    "WECOM_CALLBACK_TOKEN": "your-callback-token",
-    "WECOM_CALLBACK_AES_KEY": "your-aes-key"
+    "OPENROUTER_API_KEY": "sk-or-xxx",
+    "WECOM_CORP_ID": "ww1234567890",
+    "WECOM_CORP_SECRET": "your-secret",
+    "WECOM_AGENT_ID": "1000001",
+    "WECOM_CALLBACK_TOKEN": "your-token",
+    "WECOM_CALLBACK_AES_KEY": "your-43-char-key",
+    "WECOM_BOT_NAME": "AI助手",
+    "WECOM_WELCOME_MESSAGE": "你好！我是AI助手，有什么可以帮你的？"
   },
   "agents": {
     "defaults": {
@@ -75,257 +288,230 @@ Full example config (`~/.openclaw/openclaw.json`):
       }
     }
   },
-  "tools": {
-    "exec": {
-      "security": "full"
-    }
+  "browser": {
+    "enabled": true
   },
   "gateway": {
     "mode": "local",
-    "bind": "lan"
+    "bind": "lan",
+    "nodes": {
+      "browser": { "mode": "auto" }
+    }
   },
   "plugins": {
     "entries": {
-      "wecom": {
-        "enabled": true
-      }
+      "wecom": { "enabled": true }
     }
   }
 }
 ```
 
-### Usage
+</details>
 
-1. **Build and start the gateway**:
+---
+
+## 👥 Group Chat
+
+| Mode | Behavior |
+|:-----|:---------|
+| **Private Chat** | Bot responds to all messages |
+| **Group Chat** | Bot only responds when @mentioned |
+
+Configure @mention names:
 
 ```bash
-cd /path/to/openclaw
-pnpm build
-node dist/entry.js gateway
+WECOM_BOT_NAME=小助手
+WECOM_BOT_ALIASES=AI,机器人,助手
 ```
 
-2. **Send messages** via WeCom app to your agent
+---
 
-3. **View logs**:
+## 🔌 API Reference
 
-```bash
-tail -f /tmp/gateway.log
+<details>
+<summary><strong>WeComApiClient</strong></summary>
+
+```typescript
+import { WeComApiClient } from "wecom-openclaw-integration";
+
+const client = new WeComApiClient({
+  corpId: "your-corp-id",
+  corpSecret: "your-secret",
+  agentId: 1000001,
+});
+
+// Send text
+await client.sendText("userid", "Hello!");
+
+// Send image
+await client.sendImageFromUrl("userid", "https://example.com/image.jpg");
+
+// Send file
+await client.sendFileFile("userid", "/path/to/file.pdf");
+
+// Send card
+await client.sendTextCard("userid", {
+  title: "Card Title",
+  description: "Description",
+  url: "https://example.com",
+});
 ```
 
-### Model Recommendations
+</details>
 
-For users in China, these models work without proxy:
-- `openrouter/qwen/qwen3-max` (recommended)
-- `openrouter/qwen/qwen-2.5-72b-instruct`
+<details>
+<summary><strong>Event Handling</strong></summary>
 
-For users outside China or with proxy:
-- `openrouter/anthropic/claude-sonnet-4.5`
-- `openrouter/openai/gpt-4o`
+```typescript
+import { onEvent, setWelcomeMessage } from "wecom-openclaw-integration";
 
-### Proxy Configuration
+// Welcome new users
+setWelcomeMessage("Welcome! How can I help?");
 
-If you need to use models that require proxy (Claude, GPT, etc.):
+// Handle events
+onEvent("subscribe", async (event, config) => {
+  console.log(`New user: ${event.fromUserName}`);
+});
 
+onEvent("click", async (event, config) => {
+  // Handle menu clicks
+});
+```
+
+</details>
+
+<details>
+<summary><strong>Mini Programs</strong></summary>
+
+```typescript
+import { createMiniProgramClient } from "wecom-openclaw-integration";
+
+const mpClient = createMiniProgramClient(client);
+
+await mpClient.sendSimpleMiniProgramCard("userid", {
+  appid: "wx123456",
+  pagepath: "/pages/index",
+  title: "Open Mini Program",
+});
+```
+
+</details>
+
+---
+
+## 🤖 Recommended Models
+
+| Region | Model | Notes |
+|:-------|:------|:------|
+| 🇨🇳 China | `openrouter/qwen/qwen3-max` | ⭐ Recommended, no proxy |
+| 🇨🇳 China | `openrouter/deepseek/deepseek-chat` | Fast, cheap |
+| 🌍 Global | `openrouter/anthropic/claude-sonnet-4` | Best quality |
+| 🌍 Global | `openrouter/openai/gpt-4o` | Good balance |
+
+**Using proxy:**
 ```bash
 HTTPS_PROXY=http://127.0.0.1:7890 node dist/entry.js gateway
 ```
 
 ---
 
-## 中文
+## 📁 Project Structure
 
-### 概述
-
-OpenClaw 企业微信插件让你可以通过企业微信与 AI 智能体交互。发送消息到企业微信应用，获得具有工具调用能力的 AI 回复。
-
-### 功能特性
-
-- **消息接收**：接收企业微信用户发送的文本消息
-- **消息加解密**：AES-256-CBC 加解密，支持签名验证
-- **AI 智能体集成**：完整的 OpenClaw 智能体系统，支持工具调用
-- **文本回复**：发送文本和 Markdown 消息
-- **图片回复**：发送本地图片或从 URL 下载图片发送
-- **多模型支持**：通过 OpenRouter 支持 Qwen、Claude、GPT 等模型
-
-### 安装步骤
-
-1. **启用插件**，在 OpenClaw 配置文件 (`~/.openclaw/openclaw.json`) 中添加：
-
-```json
-{
-  "plugins": {
-    "entries": {
-      "wecom": {
-        "enabled": true
-      }
-    }
-  }
-}
 ```
-
-2. **设置环境变量**：
-
-```json
-{
-  "env": {
-    "WECOM_CORP_ID": "你的企业ID",
-    "WECOM_CORP_SECRET": "你的应用Secret",
-    "WECOM_AGENT_ID": "你的应用AgentId",
-    "WECOM_CALLBACK_TOKEN": "你的回调Token",
-    "WECOM_CALLBACK_AES_KEY": "你的EncodingAESKey"
-  }
-}
-```
-
-3. **配置企业微信管理后台**：
-   - 进入：企业微信管理后台 → 应用管理 → 你的应用 → 接收消息
-   - 设置回调 URL：`http://你的服务器IP:18789/wecom/callback`
-   - 设置 Token 和 EncodingAESKey（与配置文件一致）
-
-### 完整配置示例
-
-`~/.openclaw/openclaw.json`：
-
-```json
-{
-  "env": {
-    "OPENROUTER_API_KEY": "你的OpenRouter密钥",
-    "WECOM_CORP_ID": "你的企业ID",
-    "WECOM_CORP_SECRET": "你的应用Secret",
-    "WECOM_AGENT_ID": "你的应用AgentId",
-    "WECOM_CALLBACK_TOKEN": "你的回调Token",
-    "WECOM_CALLBACK_AES_KEY": "你的EncodingAESKey"
-  },
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "openrouter/qwen/qwen3-max"
-      }
-    }
-  },
-  "tools": {
-    "exec": {
-      "security": "full"
-    }
-  },
-  "gateway": {
-    "mode": "local",
-    "bind": "lan"
-  },
-  "plugins": {
-    "entries": {
-      "wecom": {
-        "enabled": true
-      }
-    }
-  }
-}
-```
-
-### 使用方法
-
-1. **构建并启动 Gateway**：
-
-```bash
-cd /path/to/openclaw
-pnpm build
-node dist/entry.js gateway
-```
-
-2. **通过企业微信应用发送消息**给你的智能体
-
-3. **查看日志**：
-
-```bash
-tail -f /tmp/gateway.log
-```
-
-### 模型推荐
-
-国内用户（无需代理）：
-- `openrouter/qwen/qwen3-max`（推荐）
-- `openrouter/qwen/qwen-2.5-72b-instruct`
-
-海外用户或有代理：
-- `openrouter/anthropic/claude-sonnet-4.5`
-- `openrouter/openai/gpt-4o`
-
-### 代理配置
-
-如需使用需要代理的模型（Claude、GPT 等）：
-
-```bash
-HTTPS_PROXY=http://127.0.0.1:7890 node dist/entry.js gateway
+wecom-openclaw-integration/
+├── 📄 index.ts             # Plugin entry point
+├── 📁 src/
+│   ├── api.ts              # WeCom API client
+│   ├── crypto.ts           # AES encryption
+│   ├── parser.ts           # XML parser
+│   ├── monitor.ts          # Webhook handler
+│   ├── channel.ts          # Channel definition
+│   ├── types.ts            # TypeScript types
+│   ├── group-policy.ts     # Group chat rules
+│   ├── mention.ts          # @mention detection
+│   ├── multi-account.ts    # Multi-account support
+│   ├── events.ts           # Event handlers
+│   └── miniprogram.ts      # Mini program support
+├── 📁 docs/
+│   ├── QUICKSTART_CN.md    # 中文快速入门
+│   └── BROWSER_CONTROL.md  # Browser control guide
+├── 📁 test/                # Test files
+├── 📄 CHANGELOG.md         # Version history
+└── 📄 README.md            # This file
 ```
 
 ---
 
-## TODO / 待办事项
+## 📖 Documentation
 
-### High Priority / 高优先级
-
-- [ ] **Remote browser control** - Support controlling browser on local Windows/Mac machine via Node Host
-
-  远程浏览器控制 - 支持通过 Node Host 控制本地 Windows/Mac 机器上的浏览器
-
-- [ ] **Receive media messages** - Handle images, voice, video, and files sent by users
-
-  接收媒体消息 - 处理用户发送的图片、语音、视频和文件
-
-- [ ] **Voice message sending** - Send voice messages via WeCom API
-
-  语音消息发送 - 通过企业微信 API 发送语音消息
-
-### Medium Priority / 中优先级
-
-- [ ] **Group chat support** - Handle messages in group chats with @mention detection
-
-  群聊支持 - 处理群聊消息，支持 @提及检测
-
-- [ ] **File message sending** - Send files via WeCom API
-
-  文件消息发送 - 通过企业微信 API 发送文件
-
-- [ ] **Message cards** - Support rich text card messages
-
-  消息卡片 - 支持富文本卡片消息
-
-### Low Priority / 低优先级
-
-- [ ] **Multiple accounts** - Support multiple WeCom apps/accounts
-
-  多账号支持 - 支持多个企业微信应用/账号
-
-- [ ] **Event handling** - Handle WeCom events (user follow, menu click, etc.)
-
-  事件处理 - 处理企业微信事件（用户关注、菜单点击等）
-
-- [ ] **Mini program integration** - Support mini program message types
-
-  小程序集成 - 支持小程序消息类型
+| Document | Description |
+|:---------|:------------|
+| [Quick Start (English)](./docs/QUICKSTART_EN.md) | 5-minute setup guide |
+| [Quick Start (中文)](./docs/QUICKSTART_CN.md) | 5 分钟快速入门 |
+| [Remote Control (English)](./docs/REMOTE_CONTROL_EN.md) | Control Windows PC remotely |
+| [Remote Control (中文)](./docs/REMOTE_CONTROL_CN.md) | 远程控制 Windows 电脑 |
+| [Changelog](./CHANGELOG.md) | Version history |
 
 ---
 
-## File Structure / 文件结构
+## 🐛 Troubleshooting
 
-```
-extensions/wecom/
-├── src/
-│   ├── api.ts        # WeCom API client / API 客户端
-│   ├── crypto.ts     # Message encryption / 消息加解密
-│   ├── monitor.ts    # Message handler / 消息处理
-│   ├── channel.ts    # Channel definition / 渠道定义
-│   ├── parser.ts     # XML parser / XML 解析
-│   ├── types.ts      # Type definitions / 类型定义
-│   └── runtime.ts    # Runtime config / 运行时配置
-├── index.ts          # Plugin entry / 插件入口
-├── package.json
-├── tsconfig.json
-└── README.md
-```
+<details>
+<summary><strong>Callback URL verification failed</strong></summary>
+
+- ✅ Check Token and AES Key match exactly
+- ✅ Ensure server is accessible from internet
+- ✅ Check firewall allows port 18789
+
+</details>
+
+<details>
+<summary><strong>Messages not received</strong></summary>
+
+- ✅ Verify callback URL in WeCom admin
+- ✅ Check logs: `tail -f /tmp/gateway.log`
+- ✅ Ensure plugin is enabled
+
+</details>
+
+<details>
+<summary><strong>Browser control not working</strong></summary>
+
+- ✅ Verify Node Host is connected
+- ✅ Check `browser.enabled: true`
+- ✅ Check `gateway.nodes.browser.mode: "auto"`
+
+</details>
 
 ---
 
-## License / 许可证
+## 🤝 Contributing
 
-MIT
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🔗 Links
+
+<p align="center">
+  <a href="https://github.com/openclaw/openclaw">OpenClaw</a> •
+  <a href="https://developer.work.weixin.qq.com/document/">WeCom Developer Docs</a>
+</p>
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="mailto:liujinqi@bit.edu.cn">liujinqi</a> @ Beijing Institute of Technology
+</p>
