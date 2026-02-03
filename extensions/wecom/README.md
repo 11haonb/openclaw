@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <em>For <a href="https://github.com/openclaw/openclaw">OpenClaw</a> (formerly known as Moltbot, originally Clawdbot)</em>
+  <em>For <a href="https://github.com/openclaw/openclaw">OpenClaw</a> (formerly known as Moltbot or originally Clawdbot)</em>
 </p>
 
 <p align="center">
@@ -494,6 +494,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+---
+
+## ✨ Contributors
+
+<p align="center">
+  <a href="https://github.com/zhzy0077"><img src="https://github.com/zhzy0077.png" width="50" height="50" style="border-radius: 50%;" alt="zhzy0077"></a>
+</p>
 
 ---
 
