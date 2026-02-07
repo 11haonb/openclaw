@@ -28,6 +28,7 @@ import { createWeComReplyDispatcher } from "./reply-dispatcher.js";
 // ============================================
 const seenMessages = new Map<string, number>();
 const DEDUP_TTL = 5 * 60 * 1000; // 5 分钟
+const DEDUP_MAX_SIZE = 10000; // 最大缓存数量
 
 export function isDuplicate(msgId: string | undefined): boolean {
   if (!msgId) return false;
@@ -36,6 +37,16 @@ export function isDuplicate(msgId: string | undefined): boolean {
   // 清理过期消息
   for (const [id, time] of seenMessages) {
     if (now - time > DEDUP_TTL) {
+      seenMessages.delete(id);
+    }
+  }
+
+  // 防止内存泄漏：如果缓存过大，清理最旧的条目
+  if (seenMessages.size >= DEDUP_MAX_SIZE) {
+    const entries = Array.from(seenMessages.entries());
+    entries.sort((a, b) => a[1] - b[1]);
+    const toDelete = entries.slice(0, Math.floor(DEDUP_MAX_SIZE / 2));
+    for (const [id] of toDelete) {
       seenMessages.delete(id);
     }
   }
@@ -452,13 +463,20 @@ export async function processInboundMessage(
 
   console.log(`[WeCom] Processing ${msg.msgType} message from ${senderId}${isGroup ? ` in group ${msg.chatId}` : ""}: ${content.substring(0, 100)}`);
 
+  // 群聊必须有 chatId
+  if (isGroup && !msg.chatId) {
+    console.error("[WeCom] Group message missing chatId, skipping");
+    return;
+  }
+
   try {
     const core = getWeComRuntime();
     const cfg = options.cfg ?? await loadConfigFromRuntime(core);
     const runtime = options.runtime ?? createRuntimeFromCore(core);
 
     // 确定回复目标 (群聊回复到群，单聊回复给用户)
-    const replyTarget = isGroup ? msg.chatId! : senderId;
+    // 注意：群聊时 msg.chatId 已在上面校验过不为空
+    const replyTarget: string = isGroup ? msg.chatId! : senderId;
 
     // WeCom 标识符
     const wecomFrom = `wecom:${senderId}`;
@@ -470,7 +488,7 @@ export async function processInboundMessage(
       channel: "wecom",
       peer: {
         kind: isGroup ? "group" : "dm",
-        id: isGroup ? msg.chatId! : senderId,
+        id: isGroup ? msg.chatId : senderId,
       },
     });
 
@@ -613,9 +631,17 @@ export async function processInboundMessage(
 // 辅助函数
 // ============================================
 async function readBody(req: IncomingMessage): Promise<string> {
+  const MAX_BODY_SIZE = 1024 * 1024; // 1MB
   return new Promise((resolve, reject) => {
     let body = "";
+    let size = 0;
     req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_SIZE) {
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
       body += chunk.toString();
     });
     req.on("end", () => {
@@ -626,12 +652,21 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 async function loadConfigFromRuntime(core: any): Promise<OpenClawConfig> {
-  // 尝试从 runtime 获取配置
+  // Try legacy API: core.config.get() (older versions)
   if (core?.config?.get) {
     try {
       return await core.config.get();
     } catch (err) {
-      console.warn("[WeCom] Failed to load config from runtime:", err);
+      console.warn("[WeCom] Failed to load config from runtime via config.get():", err);
+    }
+  }
+
+  // Try current PluginRuntime API: core.config.loadConfig() (sync)
+  if (core?.config?.loadConfig) {
+    try {
+      return core.config.loadConfig();
+    } catch (err) {
+      console.warn("[WeCom] Failed to load config from runtime via config.loadConfig():", err);
     }
   }
 
