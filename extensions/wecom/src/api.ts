@@ -2,6 +2,8 @@
  * WeCom API 客户端
  */
 import https from "node:https";
+import http from "node:http";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -23,9 +25,16 @@ export class WeComApiClient {
   private token: string | null = null;
   private tokenExpiresAt = 0;
   private refreshPromise: Promise<string> | null = null;
+  private lastRefreshFailure = 0;
+  private static REFRESH_COOLDOWN = 5000; // 5 seconds
 
   constructor(config: ApiClientConfig) {
     this.config = config;
+  }
+
+  /** 获取 agentId */
+  get agentId(): number {
+    return this.config.agentId;
   }
 
   /**
@@ -36,13 +45,21 @@ export class WeComApiClient {
       return this.token;
     }
 
+    if (Date.now() - this.lastRefreshFailure < WeComApiClient.REFRESH_COOLDOWN) {
+      throw new Error("Token refresh on cooldown after recent failure");
+    }
+
     if (this.refreshPromise) {
       return this.refreshPromise;
     }
 
     this.refreshPromise = this.refreshToken();
     try {
-      return await this.refreshPromise;
+      const token = await this.refreshPromise;
+      return token;
+    } catch (err) {
+      this.lastRefreshFailure = Date.now();
+      throw err;
     } finally {
       this.refreshPromise = null;
     }
@@ -88,7 +105,7 @@ export class WeComApiClient {
       text: { content },
     });
 
-    console.log(`[WeCom API] POST to ${url.substring(0, 60)}... (${isGroupChat ? "group" : "user"})`);
+    console.log(`[WeCom API] POST to message/send (${isGroupChat ? "group" : "user"})`);
     const result = await this.httpPost<WeComSendMessageResponse>(url, body);
     console.log(`[WeCom API] Response: errcode=${result.errcode}, errmsg=${result.errmsg}`);
     return result;
@@ -191,7 +208,7 @@ export class WeComApiClient {
     }
 
     const ext = this.getImageExtension(imageUrl);
-    const tempFile = path.join(tempDir, `img-${Date.now()}${ext}`);
+    const tempFile = path.join(tempDir, `img-${crypto.randomBytes(8).toString("hex")}${ext}`);
 
     await this.downloadFile(imageUrl, tempFile);
     console.log(`[WeCom API] Downloaded to: ${tempFile}`);
@@ -224,8 +241,35 @@ export class WeComApiClient {
         return;
       }
 
+      // Validate URL to prevent SSRF
+      if (!url.startsWith("https://") && !url.startsWith("http://")) {
+        reject(new Error("Only http/https URLs are allowed"));
+        return;
+      }
+      try {
+        const parsed = new URL(url);
+        const hostname = parsed.hostname;
+        // Block internal/private network addresses
+        if (
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname === "0.0.0.0" ||
+          hostname.startsWith("10.") ||
+          /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+          hostname.startsWith("192.168.") ||
+          hostname === "::1" ||
+          hostname.endsWith(".local")
+        ) {
+          reject(new Error("Downloads from internal networks are not allowed"));
+          return;
+        }
+      } catch {
+        reject(new Error("Invalid URL"));
+        return;
+      }
+
       const file = fs.createWriteStream(destPath);
-      const protocol = url.startsWith("https") ? https : require("http");
+      const protocol = url.startsWith("https") ? https : http;
 
       const req = protocol.get(url, { family: 4, timeout: 30000 }, (res: any) => {
         if (res.statusCode === 301 || res.statusCode === 302) {
@@ -295,7 +339,7 @@ export class WeComApiClient {
         res.on("end", () => {
           try {
             const body = Buffer.concat(chunks).toString("utf8");
-            console.log(`[WeCom API] httpGet response: ${body.substring(0, 100)}`);
+            console.log(`[WeCom API] httpGet response received`);
             resolve(JSON.parse(body) as T);
           } catch (error) {
             reject(new Error(`Failed to parse response: ${error}`));
@@ -316,6 +360,11 @@ export class WeComApiClient {
 
       req.end();
     });
+  }
+
+  /** 发送 JSON POST 请求（供扩展模块使用） */
+  postJson<T>(url: string, body: string): Promise<T> {
+    return this.httpPost<T>(url, body);
   }
 
   private httpPost<T>(url: string, body: string): Promise<T> {
@@ -342,7 +391,7 @@ export class WeComApiClient {
         res.on("end", () => {
           try {
             const responseBody = Buffer.concat(chunks).toString("utf8");
-            console.log(`[WeCom API] httpPost response: ${responseBody.substring(0, 200)}`);
+            console.log(`[WeCom API] httpPost response received`);
             resolve(JSON.parse(responseBody) as T);
           } catch (error) {
             reject(new Error(`Failed to parse response: ${error}`));
@@ -407,7 +456,7 @@ export class WeComApiClient {
         res.on("end", () => {
           try {
             const responseBody = Buffer.concat(chunks).toString("utf8");
-            console.log(`[WeCom API] httpPostMultipart response: ${responseBody.substring(0, 200)}`);
+            console.log(`[WeCom API] httpPostMultipart response received`);
             resolve(JSON.parse(responseBody) as T);
           } catch (error) {
             reject(new Error(`Failed to parse response: ${error}`));
@@ -464,7 +513,7 @@ export class WeComApiClient {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    const destPath = savePath || path.join(tempDir, `media-${Date.now()}`);
+    const destPath = savePath || path.join(tempDir, `media-${crypto.randomBytes(8).toString("hex")}`);
 
     return new Promise((resolve, reject) => {
       const urlObj = new URL(url);
@@ -483,18 +532,18 @@ export class WeComApiClient {
         // Check if response is JSON (error) or binary (file)
         const contentType = res.headers["content-type"] || "";
 
-        if (contentType.includes("application/json") || contentType.includes("text/plain")) {
-          // Error response
+        if (res.statusCode !== 200 || contentType.includes("application/json") || contentType.includes("text/plain")) {
+          // Error response or non-200 status
           const chunks: Buffer[] = [];
           res.on("data", (chunk) => chunks.push(chunk));
           res.on("end", () => {
             const body = Buffer.concat(chunks).toString("utf8");
-            console.log(`[WeCom API] Download error response: ${body}`);
+            console.log(`[WeCom API] Download error response (HTTP ${res.statusCode}): ${body.slice(0, 200)}`);
             try {
               const json = JSON.parse(body);
               reject(new Error(`Download failed: [${json.errcode}] ${json.errmsg}`));
             } catch {
-              reject(new Error(`Download failed: ${body}`));
+              reject(new Error(`Download failed: HTTP ${res.statusCode}`));
             }
           });
           return;
@@ -656,8 +705,8 @@ export class WeComApiClient {
     }
 
     const ext = fileName ? path.extname(fileName) : this.getFileExtension(fileUrl);
-    const baseName = fileName || `file-${Date.now()}${ext}`;
-    const tempFile = path.join(tempDir, baseName);
+    const safeName = fileName ? path.basename(fileName) : `file-${crypto.randomBytes(8).toString("hex")}${ext}`;
+    const tempFile = path.join(tempDir, safeName);
 
     await this.downloadFile(fileUrl, tempFile);
     console.log(`[WeCom API] Downloaded to: ${tempFile}`);
@@ -715,7 +764,7 @@ export class WeComApiClient {
     }
 
     const ext = this.getVideoExtension(videoUrl);
-    const tempFile = path.join(tempDir, `video-${Date.now()}${ext}`);
+    const tempFile = path.join(tempDir, `video-${crypto.randomBytes(8).toString("hex")}${ext}`);
 
     await this.downloadFile(videoUrl, tempFile);
     console.log(`[WeCom API] Downloaded to: ${tempFile}`);

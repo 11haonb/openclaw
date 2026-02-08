@@ -18,7 +18,7 @@ import type { WeComAccountConfig, WeComParsedMessage, WeComExtendedConfig } from
 import { WeComCrypto } from "./crypto.js";
 import { parseMessage, getMessageId, isEventMessage, isGroupMessage, getSessionId, getSenderId } from "./parser.js";
 import { WeComApiClient } from "./api.js";
-import { shouldRespond, processMessageContent, type MentionConfig } from "./mention.js";
+import { hasMention, shouldRespond, processMessageContent, type MentionConfig } from "./mention.js";
 import { isGroupAllowed, isUserAllowedInGroup, groupRequiresMention, DEFAULT_GROUP_CONFIG } from "./group-policy.js";
 import { getWeComRuntime } from "./runtime.js";
 import { createWeComReplyDispatcher } from "./reply-dispatcher.js";
@@ -64,6 +64,30 @@ export function clearDedupCache(): void {
 }
 
 // ============================================
+// 群聊历史记录 (持久化)
+// ============================================
+const persistentChatHistories = new Map<string, HistoryEntry[]>();
+const CHAT_HISTORY_MAX_GROUPS = 500;
+const CHAT_HISTORY_MAX_ENTRIES = 50;
+
+function trimChatHistories(): void {
+  // 限制每个群的历史条目数
+  for (const [key, entries] of persistentChatHistories) {
+    if (entries.length > CHAT_HISTORY_MAX_ENTRIES) {
+      persistentChatHistories.set(key, entries.slice(-CHAT_HISTORY_MAX_ENTRIES));
+    }
+  }
+  // 限制群数量，移除最旧的
+  if (persistentChatHistories.size > CHAT_HISTORY_MAX_GROUPS) {
+    const keys = Array.from(persistentChatHistories.keys());
+    const toDelete = keys.slice(0, keys.length - CHAT_HISTORY_MAX_GROUPS);
+    for (const key of toDelete) {
+      persistentChatHistories.delete(key);
+    }
+  }
+}
+
+// ============================================
 // API 客户端缓存
 // ============================================
 const apiClients = new Map<string, WeComApiClient>();
@@ -100,13 +124,25 @@ export function getWeComConfig(): WeComAccountConfig | null {
     return null;
   }
 
+  const parsedAgentId = parseInt(agentId, 10);
+  if (isNaN(parsedAgentId)) {
+    console.error("[WeCom] Invalid WECOM_AGENT_ID: must be a number");
+    return null;
+  }
+
+  const parsedCallbackPort = parseInt(process.env.WECOM_CALLBACK_PORT || "8080", 10);
+  if (isNaN(parsedCallbackPort)) {
+    console.error("[WeCom] Invalid WECOM_CALLBACK_PORT: must be a number");
+    return null;
+  }
+
   return {
     corpId,
     corpSecret,
-    agentId: parseInt(agentId, 10),
+    agentId: parsedAgentId,
     callbackToken,
     callbackAesKey,
-    callbackPort: parseInt(process.env.WECOM_CALLBACK_PORT || "8080", 10),
+    callbackPort: parsedCallbackPort,
     callbackPath: process.env.WECOM_CALLBACK_PATH || "/wecom/callback",
   };
 }
@@ -203,7 +239,7 @@ async function handleRequest(
     const body = await readBody(req);
 
     // 提取加密内容
-    const encryptMatch = body.match(/<Encrypt><!\[CDATA\[(.*?)\]\]><\/Encrypt>/);
+    const encryptMatch = body.match(/<Encrypt><!\[CDATA\[(.*?)\]\]><\/Encrypt>/s);
     if (!encryptMatch) {
       console.warn("[WeCom] Invalid message format: no Encrypt field");
       res.writeHead(400);
@@ -522,7 +558,7 @@ export async function processInboundMessage(
     // 处理群聊历史记录
     let combinedBody = body;
     const historyKey = isGroup ? msg.chatId : undefined;
-    const chatHistories = options.chatHistories ?? new Map<string, HistoryEntry[]>();
+    const chatHistories = options.chatHistories ?? persistentChatHistories;
     const historyLimit = DEFAULT_GROUP_HISTORY_LIMIT;
 
     if (isGroup && historyKey && chatHistories) {
@@ -559,7 +595,7 @@ export async function processInboundMessage(
       Surface: "wecom" as const,
       MessageSid: msg.msgId || `wecom-${Date.now()}`,
       Timestamp: msg.createTime * 1000,
-      WasMentioned: isGroup && requireMention,
+      WasMentioned: isGroup && hasMention(rawContent, mentionConfig),
       CommandAuthorized: true,
       OriginatingChannel: "wecom" as const,
       OriginatingTo: wecomTo,
@@ -609,6 +645,9 @@ export async function processInboundMessage(
       }
     }
 
+    // 定期清理历史记录防止内存泄漏
+    trimChatHistories();
+
     if (queuedFinal) {
       console.log(`[WeCom] Response queued for ${replyTarget}, counts:`, counts);
     } else {
@@ -617,13 +656,14 @@ export async function processInboundMessage(
   } catch (err) {
     console.error("[WeCom] Dispatch failed:", err);
 
-    // 发送错误提示
-    const client = getApiClient(accountConfig);
-    const replyTarget = isGroup ? msg.chatId! : senderId;
-    await client.sendText(
-      replyTarget,
-      `抱歉，处理消息时出错: ${err instanceof Error ? err.message : String(err)}`
-    );
+    // 发送通用错误提示，不泄露内部信息
+    try {
+      const client = getApiClient(accountConfig);
+      const replyTarget = isGroup ? msg.chatId! : senderId;
+      await client.sendText(replyTarget, "抱歉，处理消息时出现了问题，请稍后再试。");
+    } catch (sendErr) {
+      console.error("[WeCom] Failed to send error message:", sendErr);
+    }
   }
 }
 
@@ -635,9 +675,12 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = "";
     let size = 0;
+    let settled = false;
     req.on("data", (chunk) => {
+      if (settled) return;
       size += chunk.length;
       if (size > MAX_BODY_SIZE) {
+        settled = true;
         req.destroy();
         reject(new Error("Request body too large"));
         return;
@@ -645,28 +688,34 @@ async function readBody(req: IncomingMessage): Promise<string> {
       body += chunk.toString();
     });
     req.on("end", () => {
+      if (settled) return;
+      settled = true;
       resolve(body);
     });
-    req.on("error", reject);
+    req.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
   });
 }
 
 async function loadConfigFromRuntime(core: any): Promise<OpenClawConfig> {
-  // Try legacy API: core.config.get() (older versions)
-  if (core?.config?.get) {
-    try {
-      return await core.config.get();
-    } catch (err) {
-      console.warn("[WeCom] Failed to load config from runtime via config.get():", err);
-    }
-  }
-
   // Try current PluginRuntime API: core.config.loadConfig() (sync)
   if (core?.config?.loadConfig) {
     try {
       return core.config.loadConfig();
     } catch (err) {
       console.warn("[WeCom] Failed to load config from runtime via config.loadConfig():", err);
+    }
+  }
+
+  // Try legacy API: core.config.get() (older versions)
+  if (core?.config?.get) {
+    try {
+      return await core.config.get();
+    } catch (err) {
+      console.warn("[WeCom] Failed to load config from runtime via config.get():", err);
     }
   }
 
@@ -767,7 +816,7 @@ export interface MonitorConfig {
 export function createMonitorServer(config: MonitorConfig): http.Server {
   const server = http.createServer(async (req, res) => {
     try {
-      const url = new URL(req.url || "/", `http://${req.headers.host}`);
+      const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
       // 健康检查
       if (url.pathname === "/health" || url.pathname === "/wecom/health") {
@@ -807,7 +856,7 @@ export function createMonitorServer(config: MonitorConfig): http.Server {
         const body = await readBody(req);
 
         // 提取加密内容
-        const encryptMatch = body.match(/<Encrypt><!\[CDATA\[(.*?)\]\]><\/Encrypt>/);
+        const encryptMatch = body.match(/<Encrypt><!\[CDATA\[(.*?)\]\]><\/Encrypt>/s);
         if (!encryptMatch) {
           res.writeHead(400);
           res.end("Bad Request");
